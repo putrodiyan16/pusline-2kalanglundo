@@ -13,6 +13,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppLoansRouteImport } from './routes/_app/loans'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppBooksRouteImport } from './routes/_app/books'
 
@@ -35,6 +36,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppLoansRoute = AppLoansRouteImport.update({
+  id: '/loans',
+  path: '/loans',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/books': typeof AppBooksRoute
   '/dashboard': typeof AppDashboardRoute
+  '/loans': typeof AppLoansRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/books': typeof AppBooksRoute
   '/dashboard': typeof AppDashboardRoute
+  '/loans': typeof AppLoansRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -68,12 +76,13 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/_app/books': typeof AppBooksRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/loans': typeof AppLoansRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup' | '/books' | '/dashboard'
+  fullPaths: '/' | '/login' | '/signup' | '/books' | '/dashboard' | '/loans'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup' | '/books' | '/dashboard'
+  to: '/' | '/login' | '/signup' | '/books' | '/dashboard' | '/loans'
   id:
     | '__root__'
     | '/'
@@ -82,6 +91,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_app/books'
     | '/_app/dashboard'
+    | '/_app/loans'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -121,6 +131,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/loans': {
+      id: '/_app/loans'
+      path: '/loans'
+      fullPath: '/loans'
+      preLoaderRoute: typeof AppLoansRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
@@ -141,11 +158,13 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppBooksRoute: typeof AppBooksRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppLoansRoute: typeof AppLoansRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppBooksRoute: AppBooksRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppLoansRoute: AppLoansRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -159,3 +178,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
