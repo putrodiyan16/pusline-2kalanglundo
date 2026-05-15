@@ -14,16 +14,147 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      books: {
+        Row: {
+          author: string
+          available_copies: number
+          category: string | null
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          isbn: string | null
+          title: string
+          total_copies: number
+          updated_at: string
+        }
+        Insert: {
+          author: string
+          available_copies?: number
+          category?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          isbn?: string | null
+          title: string
+          total_copies?: number
+          updated_at?: string
+        }
+        Update: {
+          author?: string
+          available_copies?: number
+          category?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          isbn?: string | null
+          title?: string
+          total_copies?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      loans: {
+        Row: {
+          approved_at: string | null
+          book_id: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          requested_at: string
+          returned_at: string | null
+          status: Database["public"]["Enums"]["loan_status"]
+          user_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          book_id: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          requested_at?: string
+          returned_at?: string | null
+          status?: Database["public"]["Enums"]["loan_status"]
+          user_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          book_id?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          requested_at?: string
+          returned_at?: string | null
+          status?: Database["public"]["Enums"]["loan_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loans_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          class_name: string | null
+          created_at: string
+          full_name: string
+          id: string
+        }
+        Insert: {
+          class_name?: string | null
+          created_at?: string
+          full_name?: string
+          id: string
+        }
+        Update: {
+          class_name?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "student" | "teacher"
+      loan_status: "pending" | "approved" | "borrowed" | "returned" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +281,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["student", "teacher"],
+      loan_status: ["pending", "approved", "borrowed", "returned", "rejected"],
+    },
   },
 } as const
