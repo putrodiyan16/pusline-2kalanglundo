@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppLoansRouteImport } from './routes/_app/loans'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppBooksRouteImport } from './routes/_app/books'
+import { Route as AppManageStudentsRouteImport } from './routes/_app/manage.students'
 import { Route as AppManageBooksRouteImport } from './routes/_app/manage.books'
 
 const SignupRoute = SignupRouteImport.update({
@@ -52,6 +53,11 @@ const AppBooksRoute = AppBooksRouteImport.update({
   path: '/books',
   getParentRoute: () => AppRoute,
 } as any)
+const AppManageStudentsRoute = AppManageStudentsRouteImport.update({
+  id: '/manage/students',
+  path: '/manage/students',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppManageBooksRoute = AppManageBooksRouteImport.update({
   id: '/manage/books',
   path: '/manage/books',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/loans': typeof AppLoansRoute
   '/manage/books': typeof AppManageBooksRoute
+  '/manage/students': typeof AppManageStudentsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/loans': typeof AppLoansRoute
   '/manage/books': typeof AppManageBooksRoute
+  '/manage/students': typeof AppManageStudentsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/loans': typeof AppLoansRoute
   '/_app/manage/books': typeof AppManageBooksRoute
+  '/_app/manage/students': typeof AppManageStudentsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/loans'
     | '/manage/books'
+    | '/manage/students'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/loans'
     | '/manage/books'
+    | '/manage/students'
   id:
     | '__root__'
     | '/'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/loans'
     | '/_app/manage/books'
+    | '/_app/manage/students'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -176,6 +188,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBooksRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/manage/students': {
+      id: '/_app/manage/students'
+      path: '/manage/students'
+      fullPath: '/manage/students'
+      preLoaderRoute: typeof AppManageStudentsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/manage/books': {
       id: '/_app/manage/books'
       path: '/manage/books'
@@ -191,6 +210,7 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppLoansRoute: typeof AppLoansRoute
   AppManageBooksRoute: typeof AppManageBooksRoute
+  AppManageStudentsRoute: typeof AppManageStudentsRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -198,6 +218,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppLoansRoute: AppLoansRoute,
   AppManageBooksRoute: AppManageBooksRoute,
+  AppManageStudentsRoute: AppManageStudentsRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
