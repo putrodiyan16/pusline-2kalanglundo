@@ -77,11 +77,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Pustaka Sekolah — Perpustakaan Digital" },
       { name: "description", content: "Aplikasi perpustakaan sekolah dengan login terpisah untuk guru dan siswa." },
       { name: "author", content: "Pustaka Sekolah" },
-      { property: "og:title", content: "Pustaka Sekolah" },
-      { property: "og:description", content: "Perpustakaan digital untuk guru dan siswa." },
+      { property: "og:title", content: "Pustaka Sekolah — Perpustakaan Digital" },
+      { property: "og:description", content: "Aplikasi perpustakaan sekolah dengan login terpisah untuk guru dan siswa." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Pustaka Sekolah — Perpustakaan Digital" },
+      { name: "twitter:description", content: "Aplikasi perpustakaan sekolah dengan login terpisah untuk guru dan siswa." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9f40eb4c-0591-4fe2-a90a-5b898fe54a12/id-preview-bedb83a4--070f453e-a0d0-4ce1-bafb-c8aee927c68b.lovable.app-1778849902520.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9f40eb4c-0591-4fe2-a90a-5b898fe54a12/id-preview-bedb83a4--070f453e-a0d0-4ce1-bafb-c8aee927c68b.lovable.app-1778849902520.png" },
     ],
     links: [
       {
