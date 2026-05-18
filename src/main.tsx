@@ -1,26 +1,20 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  RouterProvider,
-  createRouter,
-  createHashHistory,
-} from "@tanstack/react-router";
+import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 
-// SPA entry used only by the GitHub Pages build (vite.gh.config.ts).
-// The Lovable preview keeps using TanStack Start's SSR shell via src/routes/__root.tsx.
-//
-// Hash history (e.g. /#/dashboard) is required because GitHub Pages
-// has no SPA fallback for unknown paths.
+// Pure SPA entry. Uses TanStack Router (no SSR / no @tanstack/react-start).
+// History defaults to the browser History API, which is what Vercel and
+// any static host with SPA fallback expect.
 
 const queryClient = new QueryClient();
 
 const router = createRouter({
   routeTree,
-  history: createHashHistory(),
   context: { queryClient },
+  scrollRestoration: true,
   defaultPreloadStaleTime: 0,
 });
 
