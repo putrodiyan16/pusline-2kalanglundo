@@ -6,7 +6,7 @@ import path from "node:path";
 
 const SUPABASE_URL = "https://plwythqedzgmsfnjqznp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwbHd5dGhxZWR6Z21zZm5qcXpucCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc5MTU4OTk5LCJleHAiOjIwOTQ3MzQ5OTl9.nNjCAKZpRVSA-vyiJtrwSf1dMhxMww_4qkhC_JY-0yQ";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsd3l0aHFlZHpnbXNmbmpxem5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNTg5OTksImV4cCI6MjA5NDczNDk5OX0.nNjCAKZpRVSA-vyiJtrwSf1dMhxMww_4qkhC_JY-0yQ";
 const SUPABASE_PROJECT_ID = "plwythqedzgmsfnjqznp";
 
 // Standard Vite SPA config — works on Vercel (zero-config) and any static host.
