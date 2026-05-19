@@ -37,7 +37,7 @@ function Index() {
               Akses cepat untuk siswa, kontrol penuh untuk guru.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/signup"><Button size="lg" className="bg-gradient-gold text-primary hover:opacity-90">Mulai Sekarang</Button></Link>
+              <Link to="/signup"><Button size="lg" className="bg-gradient-gold text-primary hover:opacity-90">Daftar</Button></Link>
               <Link to="/login"><Button size="lg" variant="outline" className="border-white/30 bg-transparent text-primary-foreground hover:bg-white/10">Masuk</Button></Link>
             </div>
           </div>
@@ -76,7 +76,7 @@ function Index() {
       </section>
 
       <footer className="border-t bg-card/50 py-8 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} Pustaka Sekolah · Dibangun dengan ♥
+        © {new Date().getFullYear()} Pustaka Sekolah · By Saputro ♥
       </footer>
     </div>
   );
