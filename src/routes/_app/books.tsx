@@ -55,14 +55,24 @@ function BooksPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filtered.map((b) => (
           <article key={b.id} className="group flex flex-col overflow-hidden rounded-xl border bg-card shadow-card-soft transition hover:shadow-elegant">
-            <div className="relative aspect-[3/4] bg-gradient-hero">
-              <div className="absolute inset-4 flex flex-col justify-between rounded border border-gold/30 p-3 text-primary-foreground">
-                <BookOpen className="h-5 w-5 text-gold" />
-                <div>
-                  <div className="font-display text-lg leading-tight line-clamp-3">{b.title}</div>
-                  <div className="mt-1 text-xs text-primary-foreground/70">{b.author}</div>
+            <div className="relative aspect-[3/4] overflow-hidden bg-gradient-hero">
+              {b.cover_url ? (
+                <img
+                  src={b.cover_url}
+                  alt={`Sampul ${b.title}`}
+                  loading="lazy"
+                  className="absolute inset-0 h-full w-full object-cover transition group-hover:scale-105"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="absolute inset-4 flex flex-col justify-between rounded border border-gold/30 p-3 text-primary-foreground">
+                  <BookOpen className="h-5 w-5 text-gold" />
+                  <div>
+                    <div className="font-display text-lg leading-tight line-clamp-3">{b.title}</div>
+                    <div className="mt-1 text-xs text-primary-foreground/70">{b.author}</div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             <div className="flex flex-1 flex-col p-4">
               <div className="flex items-center justify-between text-xs">
