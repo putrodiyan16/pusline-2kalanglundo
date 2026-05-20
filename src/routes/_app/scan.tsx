@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ScanLine, UserCheck, BookMarked, History } from "lucide-react";
+import { ScanLine, UserCheck, BookMarked, History, LayoutDashboard } from "lucide-react"; // Tambah ikon LayoutDashboard
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_app/scan")({
@@ -29,7 +29,6 @@ function ScanPage() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerId = "qr-reader";
   
-  // PERBAIKAN: Gunakan isProcessing untuk mengunci gerbang scan secara instan
   const isProcessingRef = useRef<boolean>(false);
   const qc = useQueryClient();
 
@@ -54,19 +53,16 @@ function ScanPage() {
   });
 
   const handleDecoded = async (text: string) => {
-    // PERBAIKAN: Jika sedang memproses data sebelumnya, langsung abaikan scan baru
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
 
     const userId = parseQr(text);
     if (!userId) {
       toast.error("QR tidak valid");
-      // Buka kunci kembali setelah jeda singkat jika QR salah format
       setTimeout(() => { isProcessingRef.current = false; }, 1500);
       return;
     }
 
-    // REKOMENDASI: Langsung stop kamera agar tidak berkedip membaca ulang saat data diproses
     try {
       if (scannerRef.current && scannerRef.current.isScanning) {
         await scannerRef.current.stop();
@@ -102,7 +98,6 @@ function ScanPage() {
     toast.success(`${mode === "visit" ? "Kunjungan" : "Peminjaman"} tercatat: ${prof.full_name}`);
     qc.invalidateQueries({ queryKey: ["recent-visits"] });
 
-    // Selesai memproses data, buka kunci kembali untuk pemindaian berikutnya
     isProcessingRef.current = false;
   };
 
@@ -117,7 +112,6 @@ function ScanPage() {
         } catch {}
       }
 
-      // Pastikan status kunci bersih saat mulai memindai ulang
       isProcessingRef.current = false;
 
       const scanner = new Html5Qrcode(containerId);
@@ -182,7 +176,8 @@ function ScanPage() {
 
           <div id={containerId} className="aspect-square w-full overflow-hidden rounded-lg bg-black/90" />
 
-          <div className="mt-4 flex gap-2">
+          {/* PERBAIKAN: Menyusun susunan tombol kontrol dan navigasi */}
+          <div className="mt-4 flex flex-wrap gap-2">
             {!scanning ? (
               <Button onClick={start} className="bg-gradient-gold text-primary hover:opacity-90">
                 <ScanLine className="mr-2 h-4 w-4" /> Mulai Pindai
@@ -190,13 +185,27 @@ function ScanPage() {
             ) : (
               <Button onClick={stop} variant="outline">Berhenti</Button>
             )}
+
+            {/* Tombol Utama Kembali ke Dashboard */}
+            <Button variant="outline" onClick={() => navigate({ to: "/dashboard" })}>
+              <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
+            </Button>
           </div>
 
           {lastUser && (
             <div className="mt-4 rounded-lg border bg-secondary/40 p-4">
-              <div className="text-xs uppercase tracking-widest text-muted-foreground">Terakhir dipindai</div>
-              <div className="font-display text-xl">{lastUser.full_name}</div>
-              <div className="text-sm text-muted-foreground">{lastUser.class_name || "—"}</div>
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="text-xs uppercase tracking-widest text-muted-foreground">Terakhir dipindai</div>
+                  <div className="font-display text-xl">{lastUser.full_name}</div>
+                  <div className="text-sm text-muted-foreground">{lastUser.class_name || "—"}</div>
+                </div>
+                
+                {/* Tombol Cepat Dashboard saat sukses scan */}
+                <Button size="sm" variant="secondary" onClick={() => navigate({ to: "/dashboard" })}>
+                  Selesai
+                </Button>
+              </div>
             </div>
           )}
         </div>
