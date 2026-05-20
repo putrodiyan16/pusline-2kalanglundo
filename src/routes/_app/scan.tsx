@@ -28,7 +28,9 @@ function ScanPage() {
   const [lastUser, setLastUser] = useState<{ id: string; full_name: string; class_name: string | null } | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerId = "qr-reader";
-  const cooldownRef = useRef<number>(0);
+  
+  // PERBAIKAN: Gunakan isProcessing untuk mengunci gerbang scan secara instan
+  const isProcessingRef = useRef<boolean>(false);
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -52,34 +54,56 @@ function ScanPage() {
   });
 
   const handleDecoded = async (text: string) => {
-    const now = Date.now();
-    if (now - cooldownRef.current < 2500) return;
-    cooldownRef.current = now;
+    // PERBAIKAN: Jika sedang memproses data sebelumnya, langsung abaikan scan baru
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
 
     const userId = parseQr(text);
     if (!userId) {
       toast.error("QR tidak valid");
+      // Buka kunci kembali setelah jeda singkat jika QR salah format
+      setTimeout(() => { isProcessingRef.current = false; }, 1500);
       return;
     }
+
+    // REKOMENDASI: Langsung stop kamera agar tidak berkedip membaca ulang saat data diproses
+    try {
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        await scannerRef.current.stop();
+        setScanning(false);
+      }
+    } catch (err) {
+      console.error("Gagal menghentikan scanner sementara:", err);
+    }
+
     const { data: prof, error } = await supabase
       .from("profiles")
       .select("id, full_name, class_name")
       .eq("id", userId)
       .maybeSingle();
+
     if (error || !prof) {
       toast.error("Siswa tidak ditemukan");
+      isProcessingRef.current = false;
       return;
     }
+
     const { error: insErr } = await (supabase as any)
       .from("visits")
       .insert({ user_id: userId, purpose: mode });
+
     if (insErr) {
       toast.error(insErr.message);
+      isProcessingRef.current = false;
       return;
     }
+
     setLastUser(prof);
     toast.success(`${mode === "visit" ? "Kunjungan" : "Peminjaman"} tercatat: ${prof.full_name}`);
     qc.invalidateQueries({ queryKey: ["recent-visits"] });
+
+    // Selesai memproses data, buka kunci kembali untuk pemindaian berikutnya
+    isProcessingRef.current = false;
   };
 
   const start = async () => {
@@ -87,12 +111,14 @@ function ScanPage() {
       const el = document.getElementById(containerId);
       if (!el) return;
 
-      // Bersihkan instance lama jika ada sebelum membuat yang baru
       if (scannerRef.current) {
         try {
           await scannerRef.current.stop();
         } catch {}
       }
+
+      // Pastikan status kunci bersih saat mulai memindai ulang
+      isProcessingRef.current = false;
 
       const scanner = new Html5Qrcode(containerId);
       scannerRef.current = scanner;
@@ -101,7 +127,7 @@ function ScanPage() {
         { facingMode: "environment" },
         { 
           fps: 10, 
-          qrbox: { width: 250, height: 250 } // PERBAIKAN: Menggunakan height, bukan width_
+          qrbox: { width: 250, height: 250 }
         },
         (decoded) => handleDecoded(decoded),
         () => {},
@@ -109,6 +135,7 @@ function ScanPage() {
       setScanning(true);
     } catch (e: any) {
       toast.error("Tidak dapat mengakses kamera: " + (e?.message ?? e));
+      isProcessingRef.current = false;
     }
   };
 
@@ -122,12 +149,12 @@ function ScanPage() {
     } finally {
       scannerRef.current = null;
       setScanning(false);
+      isProcessingRef.current = false;
     }
   };
 
   useEffect(() => {
     return () => {
-      // Cleanup saat komponen unmount
       if (scannerRef.current && scannerRef.current.isScanning) {
         scannerRef.current.stop().catch(() => {});
       }
