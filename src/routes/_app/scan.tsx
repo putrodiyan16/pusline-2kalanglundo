@@ -25,7 +25,7 @@ function ScanPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("visit");
   const [scanning, setScanning] = useState(false);
-  const [lastUser, setLastUser] = useState<{ id: string; name: string; class_name: string | null } | null>(null);
+  const [lastUser, setLastUser] = useState<{ id: string; full_name: string; class_name: string | null } | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerId = "qr-reader";
   const cooldownRef = useRef<number>(0);
