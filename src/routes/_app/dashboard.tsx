@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { BookOpen, BookMarked, Clock, CheckCircle2, Users } from "lucide-react";
+import { BookOpen, BookMarked, Clock, CheckCircle2, Users, ScanLine } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { QRCodeCanvas } from "qrcode.react";
 
 export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
@@ -84,6 +85,30 @@ function Dashboard() {
           <Link to="/loans"><Button variant="outline" className="mt-4">Buka</Button></Link>
         </div>
       </div>
+
+      {role === "teacher" && (
+        <div className="mt-6 rounded-xl border bg-card p-6 shadow-card-soft">
+          <h3 className="font-display text-2xl">Pindai Kartu Siswa</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Catat kunjungan & peminjaman lewat QR kartu siswa.</p>
+          <Link to="/scan"><Button className="mt-4 bg-gradient-gold text-primary hover:opacity-90"><ScanLine className="mr-2 h-4 w-4" />Buka Scanner</Button></Link>
+        </div>
+      )}
+
+      {role === "student" && user && (
+        <div className="mt-6 rounded-xl border bg-card p-6 shadow-card-soft">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <span className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Kartu Siswa</span>
+              <h3 className="font-display text-2xl">{profile?.full_name}</h3>
+              <p className="text-sm text-muted-foreground">{profile?.class_name || "—"}</p>
+              <p className="mt-2 max-w-md text-xs text-muted-foreground">Tunjukkan QR ini ke guru saat berkunjung atau meminjam buku. Kode ini menjadi identitas digitalmu di perpustakaan.</p>
+            </div>
+            <div className="rounded-lg bg-white p-3">
+              <QRCodeCanvas value={`PUSTAKA:${user.id}`} size={160} includeMargin={false} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
