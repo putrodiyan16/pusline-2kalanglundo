@@ -4,8 +4,10 @@ import { Html5Qrcode } from "html5-qrcode";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input"; 
+import { Label } from "@/components/ui/label"; 
 import { toast } from "sonner";
-import { ScanLine, UserCheck, BookMarked, History, LayoutDashboard } from "lucide-react"; // Tambah ikon LayoutDashboard
+import { ScanLine, UserCheck, BookMarked, History, LayoutDashboard, BookOpen } from "lucide-react"; 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_app/scan")({
@@ -15,7 +17,6 @@ export const Route = createFileRoute("/_app/scan")({
 type Mode = "visit" | "borrow";
 
 function parseQr(text: string): string | null {
-  // Format kartu: "PUSTAKA:<user_id>" atau langsung UUID
   const m = text.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
   return m ? m[1].toLowerCase() : null;
 }
@@ -24,8 +25,9 @@ function ScanPage() {
   const { role, loading } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("visit");
+  const [bookTitle, setBookTitle] = useState(""); // State untuk input judul buku di UI
   const [scanning, setScanning] = useState(false);
-  const [lastUser, setLastUser] = useState<{ id: string; full_name: string; class_name: string | null } | null>(null);
+  const [lastUser, setLastUser] = useState<{ id: string; full_name: string; class_name: string | null; note?: string | null } | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerId = "qr-reader";
   
@@ -41,7 +43,7 @@ function ScanPage() {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("visits")
-        .select("id, visited_at, purpose, user_id")
+        .select("id, visited_at, purpose, user_id, note") // PERBAIKAN: Ambil kolom note dari tabel asli Anda
         .order("visited_at", { ascending: false })
         .limit(15);
       const ids = [...new Set((data ?? []).map((v: any) => v.user_id))];
@@ -55,6 +57,12 @@ function ScanPage() {
   const handleDecoded = async (text: string) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
+
+    if (mode === "borrow" && !bookTitle.trim()) {
+      toast.error("Silakan isi nama/judul buku yang akan dipinjam terlebih dahulu!");
+      isProcessingRef.current = false;
+      return;
+    }
 
     const userId = parseQr(text);
     if (!userId) {
@@ -84,9 +92,14 @@ function ScanPage() {
       return;
     }
 
+    // PERBAIKAN: Memasukkan judul buku ke kolom 'note' di database visits Anda
     const { error: insErr } = await (supabase as any)
       .from("visits")
-      .insert({ user_id: userId, purpose: mode });
+      .insert({ 
+        user_id: userId, 
+        purpose: mode,
+        note: mode === "borrow" ? bookTitle.trim() : null // Judul buku masuk ke kolom note
+      });
 
     if (insErr) {
       toast.error(insErr.message);
@@ -94,14 +107,20 @@ function ScanPage() {
       return;
     }
 
-    setLastUser(prof);
-    toast.success(`${mode === "visit" ? "Kunjungan" : "Peminjaman"} tercatat: ${prof.full_name}`);
+    setLastUser({ ...prof, note: mode === "borrow" ? bookTitle.trim() : undefined });
+    toast.success(`${mode === "visit" ? "Kunjungan" : "Peminjaman buku"} berhasil dicatat!`);
+    
+    setBookTitle(""); 
     qc.invalidateQueries({ queryKey: ["recent-visits"] });
-
     isProcessingRef.current = false;
   };
 
   const start = async () => {
+    if (mode === "borrow" && !bookTitle.trim()) {
+      toast.error("Isi judul buku dahulu sebelum mulai memindai!");
+      return;
+    }
+
     try {
       const el = document.getElementById(containerId);
       if (!el) return;
@@ -113,16 +132,12 @@ function ScanPage() {
       }
 
       isProcessingRef.current = false;
-
       const scanner = new Html5Qrcode(containerId);
       scannerRef.current = scanner;
       
       await scanner.start(
         { facingMode: "environment" },
-        { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 }
-        },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
         (decoded) => handleDecoded(decoded),
         () => {},
       );
@@ -174,9 +189,25 @@ function ScanPage() {
             </Button>
           </div>
 
+          {/* INPUT FORM BUKU (masuk ke state bookTitle sebelum dikirim ke note) */}
+          {mode === "borrow" && (
+            <div className="mb-4 space-y-1.5 rounded-lg border bg-amber-50/50 p-3 dark:bg-amber-950/20">
+              <Label htmlFor="book" className="text-amber-800 dark:text-amber-300 font-medium flex items-center gap-1">
+                <BookOpen className="h-3.5 w-3.5" /> Judul / Kode Buku yang Dipinjam
+              </Label>
+              <Input
+                id="book"
+                placeholder="Masukkan judul buku atau scan kode buku..."
+                value={bookTitle}
+                onChange={(e) => setBookTitle(e.target.value)}
+                disabled={scanning}
+                className="bg-background border-amber-200 focus-visible:ring-amber-500"
+              />
+            </div>
+          )}
+
           <div id={containerId} className="aspect-square w-full overflow-hidden rounded-lg bg-black/90" />
 
-          {/* PERBAIKAN: Menyusun susunan tombol kontrol dan navigasi */}
           <div className="mt-4 flex flex-wrap gap-2">
             {!scanning ? (
               <Button onClick={start} className="bg-gradient-gold text-primary hover:opacity-90">
@@ -186,7 +217,6 @@ function ScanPage() {
               <Button onClick={stop} variant="outline">Berhenti</Button>
             )}
 
-            {/* Tombol Utama Kembali ke Dashboard */}
             <Button variant="outline" onClick={() => navigate({ to: "/dashboard" })}>
               <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
             </Button>
@@ -199,9 +229,13 @@ function ScanPage() {
                   <div className="text-xs uppercase tracking-widest text-muted-foreground">Terakhir dipindai</div>
                   <div className="font-display text-xl">{lastUser.full_name}</div>
                   <div className="text-sm text-muted-foreground">{lastUser.class_name || "—"}</div>
+                  {lastUser.note && (
+                    <div className="mt-2 text-xs text-amber-700 bg-amber-100/60 dark:bg-amber-900/40 dark:text-amber-300 inline-block px-2 py-1 rounded">
+                      📖 Meminjam: <strong>{lastUser.note}</strong>
+                    </div>
+                  )}
                 </div>
                 
-                {/* Tombol Cepat Dashboard saat sukses scan */}
                 <Button size="sm" variant="secondary" onClick={() => navigate({ to: "/dashboard" })}>
                   Selesai
                 </Button>
@@ -210,6 +244,7 @@ function ScanPage() {
           )}
         </div>
 
+        {/* RIWAYAT AKTIVITAS TERBARU (Kanan) */}
         <div className="rounded-xl border bg-card p-5 shadow-card-soft">
           <div className="mb-3 flex items-center gap-2"><History className="h-4 w-4" /><h3 className="font-display text-xl">Aktivitas Terbaru</h3></div>
           <ul className="divide-y">
@@ -219,6 +254,12 @@ function ScanPage() {
                   <div>
                     <div className="font-medium">{v.profile?.full_name || "—"}</div>
                     <div className="text-xs text-muted-foreground">{v.profile?.class_name || ""}</div>
+                    {/* Tampilkan judul buku dari kolom note di daftar riwayat */}
+                    {v.note && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 italic flex items-center gap-1">
+                        <BookOpen className="h-3 w-3" /> {v.note}
+                      </div>
+                    )}
                   </div>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${v.purpose === "borrow" ? "bg-gradient-gold text-primary" : "bg-secondary text-secondary-foreground"}`}>
                     {v.purpose === "borrow" ? "Pinjam" : "Kunjung"}
