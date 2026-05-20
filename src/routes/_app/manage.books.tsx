@@ -58,6 +58,7 @@ function ManageBooksPage() {
       category: fd.get("category") as string,
       description: fd.get("description") as string,
       total_copies: Number(fd.get("total_copies") || 1),
+      cover_url: (fd.get("cover_url") as string)?.trim() || null,
     });
   };
 
@@ -82,6 +83,11 @@ function ManageBooksPage() {
                 <div><Label>Jumlah Salinan</Label><Input type="number" min={1} name="total_copies" required defaultValue={editing?.total_copies ?? 1} /></div>
               </div>
               <div><Label>Deskripsi</Label><Textarea name="description" defaultValue={editing?.description ?? ""} /></div>
+              <div>
+                <Label>URL Sampul (Cover)</Label>
+                <Input name="cover_url" type="url" placeholder="https://contoh.com/sampul.jpg" defaultValue={editing?.cover_url ?? ""} />
+                <p className="mt-1 text-xs text-muted-foreground">Tempel link gambar (jpg/png). Kosongkan jika tidak ada.</p>
+              </div>
               <DialogFooter><Button type="submit" disabled={save.isPending} className="bg-gradient-gold text-primary hover:opacity-90">Simpan</Button></DialogFooter>
             </form>
           </DialogContent>
