@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, type ReactNode } from "react";
-import { Library, BookOpen, BookMarked, Users, ClipboardList, BarChart3, LogOut, GraduationCap } from "lucide-react";
+import { Library, BookOpen, BookMarked, Users, ClipboardList, BarChart3, LogOut, GraduationCap, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +48,7 @@ export function AppShell() {
           {role === "teacher" && (
             <>
               <div className="mt-4 px-3 text-xs uppercase tracking-widest text-gold/70">Guru</div>
+              <NavItem to="/scan" icon={ScanLine}>Pindai QR</NavItem>
               <NavItem to="/manage/books" icon={ClipboardList}>Kelola Buku</NavItem>
               <NavItem to="/manage/students" icon={Users}>Data Siswa</NavItem>
             </>
