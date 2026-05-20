@@ -13,6 +13,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppScanRouteImport } from './routes/_app/scan'
 import { Route as AppLoansRouteImport } from './routes/_app/loans'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppBooksRouteImport } from './routes/_app/books'
@@ -37,6 +38,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppScanRoute = AppScanRouteImport.update({
+  id: '/scan',
+  path: '/scan',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppLoansRoute = AppLoansRouteImport.update({
   id: '/loans',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/books': typeof AppBooksRoute
   '/dashboard': typeof AppDashboardRoute
   '/loans': typeof AppLoansRoute
+  '/scan': typeof AppScanRoute
   '/manage/books': typeof AppManageBooksRoute
   '/manage/students': typeof AppManageStudentsRoute
 }
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/books': typeof AppBooksRoute
   '/dashboard': typeof AppDashboardRoute
   '/loans': typeof AppLoansRoute
+  '/scan': typeof AppScanRoute
   '/manage/books': typeof AppManageBooksRoute
   '/manage/students': typeof AppManageStudentsRoute
 }
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/_app/books': typeof AppBooksRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/loans': typeof AppLoansRoute
+  '/_app/scan': typeof AppScanRoute
   '/_app/manage/books': typeof AppManageBooksRoute
   '/_app/manage/students': typeof AppManageStudentsRoute
 }
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/books'
     | '/dashboard'
     | '/loans'
+    | '/scan'
     | '/manage/books'
     | '/manage/students'
   fileRoutesByTo: FileRoutesByTo
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
     | '/books'
     | '/dashboard'
     | '/loans'
+    | '/scan'
     | '/manage/books'
     | '/manage/students'
   id:
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '/_app/books'
     | '/_app/dashboard'
     | '/_app/loans'
+    | '/_app/scan'
     | '/_app/manage/books'
     | '/_app/manage/students'
   fileRoutesById: FileRoutesById
@@ -166,6 +178,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/scan': {
+      id: '/_app/scan'
+      path: '/scan'
+      fullPath: '/scan'
+      preLoaderRoute: typeof AppScanRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/loans': {
       id: '/_app/loans'
@@ -209,6 +228,7 @@ interface AppRouteChildren {
   AppBooksRoute: typeof AppBooksRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppLoansRoute: typeof AppLoansRoute
+  AppScanRoute: typeof AppScanRoute
   AppManageBooksRoute: typeof AppManageBooksRoute
   AppManageStudentsRoute: typeof AppManageStudentsRoute
 }
@@ -217,6 +237,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBooksRoute: AppBooksRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppLoansRoute: AppLoansRoute,
+  AppScanRoute: AppScanRoute,
   AppManageBooksRoute: AppManageBooksRoute,
   AppManageStudentsRoute: AppManageStudentsRoute,
 }
