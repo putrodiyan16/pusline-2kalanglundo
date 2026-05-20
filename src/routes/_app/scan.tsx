@@ -86,11 +86,23 @@ function ScanPage() {
     try {
       const el = document.getElementById(containerId);
       if (!el) return;
+
+      // Bersihkan instance lama jika ada sebelum membuat yang baru
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop();
+        } catch {}
+      }
+
       const scanner = new Html5Qrcode(containerId);
       scannerRef.current = scanner;
+      
       await scanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, width_: 250 } as any },
+        { 
+          fps: 10, 
+          qrbox: { width: 250, height: 250 } // PERBAIKAN: Menggunakan height, bukan width_
+        },
         (decoded) => handleDecoded(decoded),
         () => {},
       );
@@ -102,16 +114,24 @@ function ScanPage() {
 
   const stop = async () => {
     try {
-      await scannerRef.current?.stop();
-      await scannerRef.current?.clear();
-    } catch {}
-    scannerRef.current = null;
-    setScanning(false);
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        await scannerRef.current.stop();
+      }
+    } catch (e) {
+      console.error("Gagal menghentikan scanner:", e);
+    } finally {
+      scannerRef.current = null;
+      setScanning(false);
+    }
   };
 
   useEffect(() => {
-    return () => { stop(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      // Cleanup saat komponen unmount
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        scannerRef.current.stop().catch(() => {});
+      }
+    };
   }, []);
 
   return (
