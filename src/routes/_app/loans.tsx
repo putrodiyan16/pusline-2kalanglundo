@@ -22,20 +22,36 @@ function LoansPage() {
   const qc = useQueryClient();
 
   const { data: loans } = useQuery({
-    // queryKey disederhanakan agar mudah di-invalidate oleh scanner
     queryKey: ["loans", role, user?.id],
     queryFn: async () => {
-      // Mengurutkan berdasarkan approved_at atau requested_at secara dinamis di level database
+      // 1) Ambil loans + judul buku (FK loans.book_id -> books.id valid)
       let q = supabase
         .from("loans")
-        .select("*, books(title, author), profiles!loans_user_id_fkey(full_name, class_name)")
-        .order("approved_at", { ascending: false, nullsFirst: false }); // Dahulukan yang sudah disetujui lewat scan
-      
+        .select("*, books(title, author)")
+        .order("approved_at", { ascending: false, nullsFirst: false });
+
       if (role === "student") q = q.eq("user_id", user!.id);
-      
-      const { data, error } = await q;
+
+      const { data: rows, error } = await q;
       if (error) throw error;
-      return data as any[];
+
+      // 2) Ambil profil peminjam terpisah.
+      // FK loans.user_id menunjuk ke auth.users (BUKAN profiles),
+      // sehingga PostgREST tidak bisa meng-embed profiles secara langsung.
+      const userIds = [...new Set((rows ?? []).map((r: any) => r.user_id))];
+      let profileMap = new Map<string, any>();
+      if (userIds.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name, class_name")
+          .in("id", userIds as any);
+        profileMap = new Map((profs ?? []).map((p) => [p.id, p]));
+      }
+
+      return (rows ?? []).map((r: any) => ({
+        ...r,
+        profiles: profileMap.get(r.user_id) ?? null,
+      })) as any[];
     },
     enabled: !!user && !!role,
   });
@@ -43,33 +59,34 @@ function LoansPage() {
   const update = useMutation({
     mutationFn: async ({ id, status, bookId, prev }: { id: string; status: string; bookId: string; prev: string }) => {
       const u: any = { status };
-      if (status === "approved") { 
-        u.approved_at = new Date().toISOString(); 
-        u.due_date = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10); 
+      if (status === "approved") {
+        u.approved_at = new Date().toISOString();
+        u.due_date = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
       }
       if (status === "returned") u.returned_at = new Date().toISOString();
-      
+
       const { error } = await supabase.from("loans").update(u).eq("id", id);
       if (error) throw error;
-      
+
       const { data: book } = await supabase.from("books").select("available_copies").eq("id", bookId).single();
       if (book) {
         let a = book.available_copies;
-        const w = ["approved","borrowed"].includes(prev), n = ["approved","borrowed"].includes(status);
-        if (!w && n) a -= 1; if (w && !n) a += 1;
+        const w = ["approved", "borrowed"].includes(prev),
+          n = ["approved", "borrowed"].includes(status);
+        if (!w && n) a -= 1;
+        if (w && !n) a += 1;
         await supabase.from("books").update({ available_copies: a }).eq("id", bookId);
       }
     },
-    onSuccess: () => { 
-      qc.invalidateQueries({ queryKey: ["loans"] }); 
-      qc.invalidateQueries({ queryKey: ["books"] }); 
-      qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); 
-      toast.success("Status diperbarui"); 
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["loans"] });
+      qc.invalidateQueries({ queryKey: ["books"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast.success("Status diperbarui");
     },
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Fungsi pembantu untuk memformat tanggal secara aman jika requested_at bernilai null
   const formatTanggalAjuan = (requestedAt: string | null, approvedAt: string | null) => {
     const tanggalMentah = requestedAt || approvedAt || new Date().toISOString();
     return new Date(tanggalMentah).toLocaleDateString("id-ID");
