@@ -199,10 +199,11 @@ function ScanPage() {
     const nowIso = new Date().toISOString();
     const due = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
     
+    // Perbaikan di bagian ini: status diubah menjadi "approved" agar sesuai dengan enum di Supabase
     const rows = Array.from(selectedBooks).map((book_id) => ({
       user_id: scannedStudent.id,
       book_id,
-      status: "borrowed",
+      status: "approved", 
       approved_at: nowIso,
       due_date: due,
     }));
@@ -244,7 +245,7 @@ function ScanPage() {
     setScannedStudent(null);
     setSelectedBooks(new Set());
   };
-
+  
   const filteredBooks = (books ?? []).filter((b: any) => {
     if (!bookSearch) return true;
     const q = bookSearch.toLowerCase();
