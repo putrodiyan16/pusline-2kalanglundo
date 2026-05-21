@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 export const Route = createFileRoute("/_app/loans")({
   component: LoansPage,
@@ -21,14 +22,14 @@ function LoansPage() {
   const { user, role } = useAuth();
   const qc = useQueryClient();
 
-  const { data: loans } = useQuery({
+  const { data: loans, isLoading } = useQuery({
     queryKey: ["loans", role, user?.id],
     queryFn: async () => {
       // 1) Ambil loans + judul buku (FK loans.book_id -> books.id valid)
       let q = supabase
         .from("loans")
         .select("*, books(title, author)")
-        .order("approved_at", { ascending: false, nullsFirst: false });
+        .order("requested_at", { ascending: false }); // ← Ubah dari approved_at ke requested_at
 
       if (role === "student") q = q.eq("user_id", user!.id);
 
@@ -54,7 +55,41 @@ function LoansPage() {
       })) as any[];
     },
     enabled: !!user && !!role,
+    // Refetch otomatis setiap 5 detik
+    refetchInterval: 5000,
   });
+
+  // 🔄 Real-time subscription untuk update instan saat ada perubahan di tabel loans
+  useEffect(() => {
+    if (!user || !role) return;
+
+    const subscription = supabase
+      .channel(`loans-${user.id}-${role}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // Dengarkan INSERT, UPDATE, DELETE
+          schema: "public",
+          table: "loans",
+          // Filter: guru lihat semua, siswa hanya punya mereka
+          filter: role === "student" ? `user_id=eq.${user.id}` : undefined,
+        },
+        (payload) => {
+          console.log("📡 Perubahan data loans:", payload);
+          // Invalidate query untuk refetch data terbaru
+          qc.invalidateQueries({ queryKey: ["loans", role, user.id] });
+          // Jika guru, juga refetch stats
+          if (role === "teacher") {
+            qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user, role, qc]);
 
   const update = useMutation({
     mutationFn: async ({ id, status, bookId, prev }: { id: string; status: string; bookId: string; prev: string }) => {
@@ -98,6 +133,14 @@ function LoansPage() {
         <h1 className="font-display text-4xl">{role === "teacher" ? "Semua Peminjaman" : "Peminjaman Saya"}</h1>
         <p className="mt-1 text-muted-foreground">{role === "teacher" ? "Setujui, tolak, atau tandai pengembalian." : "Riwayat dan status pengajuanmu."}</p>
       </header>
+      
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="rounded-xl border bg-card p-6 shadow-card-soft text-center text-muted-foreground">
+          Memuat data peminjaman...
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-xl border bg-card shadow-card-soft">
         <table className="w-full text-sm">
           <thead className="bg-secondary text-secondary-foreground">
@@ -114,7 +157,7 @@ function LoansPage() {
             {(loans ?? []).map((l) => {
               const s = STATUS[l.status];
               return (
-                <tr key={l.id} className="border-t">
+                <tr key={l.id} className="border-t hover:bg-secondary/20">
                   <td className="p-3">
                     <div className="font-medium">{l.books?.title}</div>
                     <div className="text-xs text-muted-foreground">{l.books?.author}</div>
@@ -141,7 +184,7 @@ function LoansPage() {
                       <div className="flex flex-wrap gap-2">
                         {l.status === "pending" && (
                           <>
-                            <Button size="sm" className="bg-gradient-gold text-primary hover:opacity-90" onClick={() => update.mutate({ id: l.id, status: "approved", bookId: l.book_id, prev: l.status })}>Setujui</Button>
+                            <Button size="sm" className="bg-gradient-gold text-primary hover:opacity-90" onClick={() => update.mutate({ id: l.id, status: "approved", bookId: l.book_id, prev: l.status })}>Setuju</Button>
                             <Button size="sm" variant="outline" onClick={() => update.mutate({ id: l.id, status: "rejected", bookId: l.book_id, prev: l.status })}>Tolak</Button>
                           </>
                         )}
@@ -156,7 +199,7 @@ function LoansPage() {
                 </tr>
               );
             })}
-            {(!loans || loans.length === 0) && (
+            {(!loans || loans.length === 0) && !isLoading && (
               <tr>
                 <td colSpan={role === "teacher" ? 6 : 5} className="p-8 text-center text-muted-foreground">
                   Belum ada peminjaman.
