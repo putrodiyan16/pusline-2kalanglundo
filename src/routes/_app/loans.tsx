@@ -22,37 +22,53 @@ function LoansPage() {
   const { user, role } = useAuth();
   const qc = useQueryClient();
 
-  const { data: loans, isLoading } = useQuery({
+  const { data: loans, isLoading, error } = useQuery({
     queryKey: ["loans", role, user?.id],
     queryFn: async () => {
-      // 1) Ambil loans + judul buku (FK loans.book_id -> books.id valid)
-      let q = supabase
-        .from("loans")
-        .select("*, books(title, author)")
-        .order("requested_at", { ascending: false }); // ← Ubah dari approved_at ke requested_at
+      try {
+        // 1) Ambil loans dengan data buku (FIX: select dengan parenthesis yang benar)
+        let q = supabase
+          .from("loans")
+          .select("id, book_id, user_id, status, requested_at, approved_at, due_date, returned_at, notes, books!book_id(id, title, author)")
+          .order("requested_at", { ascending: false });
 
-      if (role === "student") q = q.eq("user_id", user!.id);
+        if (role === "student") q = q.eq("user_id", user!.id);
 
-      const { data: rows, error } = await q;
-      if (error) throw error;
+        const { data: rows, error: err } = await q;
+        
+        if (err) {
+          console.error("❌ Query loans error:", err);
+          throw err;
+        }
 
-      // 2) Ambil profil peminjam terpisah.
-      // FK loans.user_id menunjuk ke auth.users (BUKAN profiles),
-      // sehingga PostgREST tidak bisa meng-embed profiles secara langsung.
-      const userIds = [...new Set((rows ?? []).map((r: any) => r.user_id))];
-      let profileMap = new Map<string, any>();
-      if (userIds.length > 0) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, full_name, class_name")
-          .in("id", userIds as any);
-        profileMap = new Map((profs ?? []).map((p) => [p.id, p]));
+        console.log("✅ Loans fetched:", rows?.length, "records");
+
+        // 2) Ambil profil peminjam terpisah
+        const userIds = [...new Set((rows ?? []).map((r: any) => r.user_id))];
+        let profileMap = new Map<string, any>();
+        
+        if (userIds.length > 0) {
+          const { data: profs, error: profErr } = await supabase
+            .from("profiles")
+            .select("id, full_name, class_name")
+            .in("id", userIds as any);
+          
+          if (profErr) {
+            console.warn("⚠️ Profiles fetch warning:", profErr);
+          } else {
+            profileMap = new Map((profs ?? []).map((p) => [p.id, p]));
+            console.log("✅ Profiles fetched:", profs?.length, "records");
+          }
+        }
+
+        return (rows ?? []).map((r: any) => ({
+          ...r,
+          profiles: profileMap.get(r.user_id) ?? null,
+        })) as any[];
+      } catch (err) {
+        console.error("❌ Loans query failed:", err);
+        throw err;
       }
-
-      return (rows ?? []).map((r: any) => ({
-        ...r,
-        profiles: profileMap.get(r.user_id) ?? null,
-      })) as any[];
     },
     enabled: !!user && !!role,
     // Refetch otomatis setiap 5 detik
@@ -62,6 +78,8 @@ function LoansPage() {
   // 🔄 Real-time subscription untuk update instan saat ada perubahan di tabel loans
   useEffect(() => {
     if (!user || !role) return;
+
+    console.log("🔄 Setting up real-time subscription for loans...");
 
     const subscription = supabase
       .channel(`loans-${user.id}-${role}`)
@@ -84,9 +102,12 @@ function LoansPage() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("📡 Subscription status:", status);
+      });
 
     return () => {
+      console.log("🔌 Unsubscribing from loans channel...");
       subscription.unsubscribe();
     };
   }, [user, role, qc]);
@@ -119,7 +140,10 @@ function LoansPage() {
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       toast.success("Status diperbarui");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => {
+      console.error("❌ Update error:", e);
+      toast.error(e.message);
+    },
   });
 
   const formatTanggalAjuan = (requestedAt: string | null, approvedAt: string | null) => {
@@ -141,6 +165,14 @@ function LoansPage() {
         </div>
       )}
 
+      {/* Error indicator */}
+      {error && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-6 shadow-card-soft text-center text-red-700">
+          <p className="font-medium">❌ Gagal memuat data peminjaman</p>
+          <p className="text-sm mt-1">{error instanceof Error ? error.message : "Terjadi kesalahan"}</p>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-xl border bg-card shadow-card-soft">
         <table className="w-full text-sm">
           <thead className="bg-secondary text-secondary-foreground">
@@ -159,8 +191,8 @@ function LoansPage() {
               return (
                 <tr key={l.id} className="border-t hover:bg-secondary/20">
                   <td className="p-3">
-                    <div className="font-medium">{l.books?.title}</div>
-                    <div className="text-xs text-muted-foreground">{l.books?.author}</div>
+                    <div className="font-medium">{l.books?.title || "—"}</div>
+                    <div className="text-xs text-muted-foreground">{l.books?.author || "—"}</div>
                   </td>
                   {role === "teacher" && (
                     <td className="p-3">
@@ -199,7 +231,7 @@ function LoansPage() {
                 </tr>
               );
             })}
-            {(!loans || loans.length === 0) && !isLoading && (
+            {(!loans || loans.length === 0) && !isLoading && !error && (
               <tr>
                 <td colSpan={role === "teacher" ? 6 : 5} className="p-8 text-center text-muted-foreground">
                   Belum ada peminjaman.
