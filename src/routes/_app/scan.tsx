@@ -32,7 +32,6 @@ function ScanPage() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerId = "qr-reader";
   
-  // Menggunakan IsProcessing untuk mengunci proses async agar tidak double scan
   const isProcessingRef = useRef<boolean>(false);
   const cooldownRef = useRef<number>(0);
   const qc = useQueryClient();
@@ -80,15 +79,25 @@ function ScanPage() {
 
   const handleDecoded = async (text: string) => {
     const now = Date.now();
-    // Jika sedang memproses atau masih dalam cooldown, abaikan hasil scan berikutnya
     if (isProcessingRef.current || now - cooldownRef.current < 3000) return;
     
-    isProcessingRef.current = true; // Kunci proses
+    isProcessingRef.current = true;
+
+    // Hentikan pemindaian gambar secara instan di level hardware/kamera
+    if (scannerRef.current && scannerRef.current.isScanning) {
+      try {
+        await scannerRef.current.pause(true);
+      } catch (e) {
+        console.error("Gagal menjeda kamera:", e);
+      }
+    }
 
     try {
       const userId = parseQr(text);
       if (!userId) {
         toast.error("QR tidak valid");
+        if (scannerRef.current) await scannerRef.current.resume();
+        isProcessingRef.current = false;
         return;
       }
       
@@ -100,6 +109,8 @@ function ScanPage() {
         
       if (error || !prof) {
         toast.error("Siswa tidak ditemukan");
+        if (scannerRef.current) await scannerRef.current.resume();
+        isProcessingRef.current = false;
         return;
       }
 
@@ -110,23 +121,39 @@ function ScanPage() {
           
         if (insErr) {
           toast.error(insErr.message);
+          if (scannerRef.current) await scannerRef.current.resume();
+          isProcessingRef.current = false;
           return;
         }
         
         setLastUser(prof);
         toast.success(`Kunjungan tercatat: ${prof.full_name}`);
         qc.invalidateQueries({ queryKey: ["recent-visits"] });
+
+        // Beri jeda waktu 3 detik agar kartu QR sempat dijauhkan sebelum kamera aktif lagi
+        setTimeout(async () => {
+          if (scannerRef.current) {
+            try {
+              await scannerRef.current.resume();
+            } catch {}
+          }
+          cooldownRef.current = Date.now();
+          isProcessingRef.current = false;
+        }, 10000);
+
       } else {
         setScannedStudent(prof);
         setSelectedBooks(new Set());
         await stop();
         toast.success(`Siswa terdeteksi: ${prof.full_name}`);
+        isProcessingRef.current = false;
       }
     } catch (e: any) {
       toast.error("Terjadi kesalahan sistem");
-    } finally {
-      cooldownRef.current = Date.now();
-      isProcessingRef.current = false; // Buka kembali kunci setelah selesai
+      if (scannerRef.current) {
+        try { await scannerRef.current.resume(); } catch {}
+      }
+      isProcessingRef.current = false;
     }
   };
 
@@ -134,6 +161,9 @@ function ScanPage() {
     try {
       const el = document.getElementById(containerId);
       if (!el) return;
+      
+      isProcessingRef.current = false;
+      
       const scanner = new Html5Qrcode(containerId);
       scannerRef.current = scanner;
       await scanner.start(
@@ -177,14 +207,12 @@ function ScanPage() {
       due_date: due,
     }));
 
-    // 1. Simpan ke tabel loans
     const { error: loanError } = await supabase.from("loans").insert(rows);
     if (loanError) {
       toast.error(`Gagal menyimpan pinjaman: ${loanError.message}`);
       return;
     }
 
-    // 2. Simpan ke tabel visits sesuai struktur database Anda yang sudah fiks
     const { error: visitError } = await (supabase as any)
       .from("visits")
       .insert({ user_id: scannedStudent.id, purpose: "borrow" });
@@ -194,7 +222,6 @@ function ScanPage() {
       return;
     }
 
-    // 3. Update stok buku satu per satu secara paralel
     const updatePromises = Array.from(selectedBooks).map(async (id) => {
       const b = (books ?? []).find((x: any) => x.id === id);
       if (b && typeof b.available_copies === "number") {
@@ -209,13 +236,11 @@ function ScanPage() {
 
     toast.success(`${rows.length} peminjaman tercatat untuk ${scannedStudent.full_name}`);
     
-    // Refresh semua data query cache
     qc.invalidateQueries({ queryKey: ["loans"] });
     qc.invalidateQueries({ queryKey: ["books"] });
     qc.invalidateQueries({ queryKey: ["books-for-loan"] });
     qc.invalidateQueries({ queryKey: ["recent-visits"] });
     
-    // Reset state form setelah sukses
     setScannedStudent(null);
     setSelectedBooks(new Set());
   };
