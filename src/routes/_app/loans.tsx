@@ -26,10 +26,10 @@ function LoansPage() {
     queryKey: ["loans", role, user?.id],
     queryFn: async () => {
       try {
-        // 1) Ambil loans dengan data buku (FIX: select dengan parenthesis yang benar)
+        // 1️⃣ Fetch loans TANPA embed (plain query)
         let q = supabase
           .from("loans")
-          .select("id, book_id, user_id, status, requested_at, approved_at, due_date, returned_at, notes, books!book_id(id, title, author)")
+          .select("*")
           .order("requested_at", { ascending: false });
 
         if (role === "student") q = q.eq("user_id", user!.id);
@@ -37,66 +37,90 @@ function LoansPage() {
         const { data: rows, error: err } = await q;
         
         if (err) {
-          console.error("❌ Query loans error:", err);
+          console.error("❌ Loans query error:", err);
           throw err;
         }
 
-        console.log("✅ Loans fetched:", rows?.length, "records");
+        console.log("✅ Loans fetched:", rows?.length ?? 0, "records");
 
-        // 2) Ambil profil peminjam terpisah
-        const userIds = [...new Set((rows ?? []).map((r: any) => r.user_id))];
+        if (!rows || rows.length === 0) {
+          console.log("⚠️ Tidak ada data loans");
+          return [];
+        }
+
+        // 2️⃣ Fetch books (tanpa embed, plain query)
+        const bookIds = [...new Set((rows as any[]).map((r) => r.book_id))];
+        let bookMap = new Map<string, any>();
+
+        if (bookIds.length > 0) {
+          const { data: books, error: bookErr } = await supabase
+            .from("books")
+            .select("id, title, author")
+            .in("id", bookIds);
+
+          if (bookErr) {
+            console.warn("⚠️ Books fetch warning:", bookErr);
+          } else {
+            bookMap = new Map((books ?? []).map((b) => [b.id, b]));
+            console.log("✅ Books fetched:", books?.length ?? 0, "records");
+          }
+        }
+
+        // 3️⃣ Fetch profiles (tanpa embed, plain query)
+        const userIds = [...new Set((rows as any[]).map((r) => r.user_id))];
         let profileMap = new Map<string, any>();
-        
+
         if (userIds.length > 0) {
           const { data: profs, error: profErr } = await supabase
             .from("profiles")
             .select("id, full_name, class_name")
-            .in("id", userIds as any);
-          
+            .in("id", userIds);
+
           if (profErr) {
             console.warn("⚠️ Profiles fetch warning:", profErr);
           } else {
             profileMap = new Map((profs ?? []).map((p) => [p.id, p]));
-            console.log("✅ Profiles fetched:", profs?.length, "records");
+            console.log("✅ Profiles fetched:", profs?.length ?? 0, "records");
           }
         }
 
-        return (rows ?? []).map((r: any) => ({
+        // 4️⃣ Gabung data secara manual di JavaScript
+        const result = (rows as any[]).map((r) => ({
           ...r,
+          books: bookMap.get(r.book_id) ?? null,
           profiles: profileMap.get(r.user_id) ?? null,
-        })) as any[];
+        }));
+
+        console.log("✅ Final merged data:", result.length, "records");
+        return result;
       } catch (err) {
         console.error("❌ Loans query failed:", err);
         throw err;
       }
     },
     enabled: !!user && !!role,
-    // Refetch otomatis setiap 5 detik
     refetchInterval: 5000,
   });
 
-  // 🔄 Real-time subscription untuk update instan saat ada perubahan di tabel loans
+  // 🔄 Real-time subscription
   useEffect(() => {
     if (!user || !role) return;
 
-    console.log("🔄 Setting up real-time subscription for loans...");
+    console.log("🔄 Setting up real-time subscription...");
 
     const subscription = supabase
       .channel(`loans-${user.id}-${role}`)
       .on(
         "postgres_changes",
         {
-          event: "*", // Dengarkan INSERT, UPDATE, DELETE
+          event: "*",
           schema: "public",
           table: "loans",
-          // Filter: guru lihat semua, siswa hanya punya mereka
           filter: role === "student" ? `user_id=eq.${user.id}` : undefined,
         },
         (payload) => {
-          console.log("📡 Perubahan data loans:", payload);
-          // Invalidate query untuk refetch data terbaru
+          console.log("📡 Perubahan loans:", payload);
           qc.invalidateQueries({ queryKey: ["loans", role, user.id] });
-          // Jika guru, juga refetch stats
           if (role === "teacher") {
             qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
           }
@@ -107,7 +131,6 @@ function LoansPage() {
       });
 
     return () => {
-      console.log("🔌 Unsubscribing from loans channel...");
       subscription.unsubscribe();
     };
   }, [user, role, qc]);
@@ -158,14 +181,12 @@ function LoansPage() {
         <p className="mt-1 text-muted-foreground">{role === "teacher" ? "Setujui, tolak, atau tandai pengembalian." : "Riwayat dan status pengajuanmu."}</p>
       </header>
       
-      {/* Loading indicator */}
       {isLoading && (
         <div className="rounded-xl border bg-card p-6 shadow-card-soft text-center text-muted-foreground">
           Memuat data peminjaman...
         </div>
       )}
 
-      {/* Error indicator */}
       {error && (
         <div className="rounded-xl border border-red-300 bg-red-50 p-6 shadow-card-soft text-center text-red-700">
           <p className="font-medium">❌ Gagal memuat data peminjaman</p>
@@ -186,7 +207,7 @@ function LoansPage() {
             </tr>
           </thead>
           <tbody>
-            {(loans ?? []).map((l) => {
+            {(loans ?? []).map((l: any) => {
               const s = STATUS[l.status];
               return (
                 <tr key={l.id} className="border-t hover:bg-secondary/20">
