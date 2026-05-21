@@ -22,10 +22,17 @@ function LoansPage() {
   const qc = useQueryClient();
 
   const { data: loans } = useQuery({
+    // queryKey disederhanakan agar mudah di-invalidate oleh scanner
     queryKey: ["loans", role, user?.id],
     queryFn: async () => {
-      let q = supabase.from("loans").select("*, books(title, author), profiles!loans_user_id_fkey(full_name, class_name)").order("requested_at", { ascending: false });
+      // Mengurutkan berdasarkan approved_at atau requested_at secara dinamis di level database
+      let q = supabase
+        .from("loans")
+        .select("*, books(title, author), profiles!loans_user_id_fkey(full_name, class_name)")
+        .order("approved_at", { ascending: false, nullsFirst: false }); // Dahulukan yang sudah disetujui lewat scan
+      
       if (role === "student") q = q.eq("user_id", user!.id);
+      
       const { data, error } = await q;
       if (error) throw error;
       return data as any[];
@@ -36,10 +43,15 @@ function LoansPage() {
   const update = useMutation({
     mutationFn: async ({ id, status, bookId, prev }: { id: string; status: string; bookId: string; prev: string }) => {
       const u: any = { status };
-      if (status === "approved") { u.approved_at = new Date().toISOString(); u.due_date = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10); }
+      if (status === "approved") { 
+        u.approved_at = new Date().toISOString(); 
+        u.due_date = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10); 
+      }
       if (status === "returned") u.returned_at = new Date().toISOString();
+      
       const { error } = await supabase.from("loans").update(u).eq("id", id);
       if (error) throw error;
+      
       const { data: book } = await supabase.from("books").select("available_copies").eq("id", bookId).single();
       if (book) {
         let a = book.available_copies;
@@ -48,9 +60,20 @@ function LoansPage() {
         await supabase.from("books").update({ available_copies: a }).eq("id", bookId);
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["loans"] }); qc.invalidateQueries({ queryKey: ["books"] }); qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); toast.success("Status diperbarui"); },
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: ["loans"] }); 
+      qc.invalidateQueries({ queryKey: ["books"] }); 
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); 
+      toast.success("Status diperbarui"); 
+    },
     onError: (e: any) => toast.error(e.message),
   });
+
+  // Fungsi pembantu untuk memformat tanggal secara aman jika requested_at bernilai null
+  const formatTanggalAjuan = (requestedAt: string | null, approvedAt: string | null) => {
+    const tanggalMentah = requestedAt || approvedAt || new Date().toISOString();
+    return new Date(tanggalMentah).toLocaleDateString("id-ID");
+  };
 
   return (
     <div>
@@ -60,37 +83,69 @@ function LoansPage() {
       </header>
       <div className="overflow-x-auto rounded-xl border bg-card shadow-card-soft">
         <table className="w-full text-sm">
-          <thead className="bg-secondary text-secondary-foreground"><tr className="text-left">
-            <th className="p-3">Buku</th>{role === "teacher" && <th className="p-3">Peminjam</th>}
-            <th className="p-3">Diajukan</th><th className="p-3">Jatuh Tempo</th><th className="p-3">Status</th><th className="p-3">Aksi</th>
-          </tr></thead>
+          <thead className="bg-secondary text-secondary-foreground">
+            <tr className="text-left">
+              <th className="p-3">Buku</th>
+              {role === "teacher" && <th className="p-3">Peminjam</th>}
+              <th className="p-3">Diajukan/Tercatat</th>
+              <th className="p-3">Jatuh Tempo</th>
+              <th className="p-3">Status</th>
+              <th className="p-3">Aksi</th>
+            </tr>
+          </thead>
           <tbody>
             {(loans ?? []).map((l) => {
               const s = STATUS[l.status];
               return (
                 <tr key={l.id} className="border-t">
-                  <td className="p-3"><div className="font-medium">{l.books?.title}</div><div className="text-xs text-muted-foreground">{l.books?.author}</div></td>
-                  {role === "teacher" && <td className="p-3"><div>{l.profiles?.full_name || "—"}</div><div className="text-xs text-muted-foreground">{l.profiles?.class_name || ""}</div></td>}
-                  <td className="p-3 text-muted-foreground">{new Date(l.requested_at).toLocaleDateString("id-ID")}</td>
-                  <td className="p-3 text-muted-foreground">{l.due_date ? new Date(l.due_date).toLocaleDateString("id-ID") : "—"}</td>
-                  <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s?.cls}`}>{s?.label}</span></td>
+                  <td className="p-3">
+                    <div className="font-medium">{l.books?.title}</div>
+                    <div className="text-xs text-muted-foreground">{l.books?.author}</div>
+                  </td>
+                  {role === "teacher" && (
+                    <td className="p-3">
+                      <div>{l.profiles?.full_name || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{l.profiles?.class_name || ""}</div>
+                    </td>
+                  )}
+                  <td className="p-3 text-muted-foreground">
+                    {formatTanggalAjuan(l.requested_at, l.approved_at)}
+                  </td>
+                  <td className="p-3 text-muted-foreground">
+                    {l.due_date ? new Date(l.due_date).toLocaleDateString("id-ID") : "—"}
+                  </td>
+                  <td className="p-3">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s?.cls}`}>
+                      {s?.label || l.status}
+                    </span>
+                  </td>
                   <td className="p-3">
                     {role === "teacher" ? (
                       <div className="flex flex-wrap gap-2">
-                        {l.status === "pending" && (<>
-                          <Button size="sm" className="bg-gradient-gold text-primary hover:opacity-90" onClick={() => update.mutate({ id: l.id, status: "approved", bookId: l.book_id, prev: l.status })}>Setujui</Button>
-                          <Button size="sm" variant="outline" onClick={() => update.mutate({ id: l.id, status: "rejected", bookId: l.book_id, prev: l.status })}>Tolak</Button>
-                        </>)}
+                        {l.status === "pending" && (
+                          <>
+                            <Button size="sm" className="bg-gradient-gold text-primary hover:opacity-90" onClick={() => update.mutate({ id: l.id, status: "approved", bookId: l.book_id, prev: l.status })}>Setujui</Button>
+                            <Button size="sm" variant="outline" onClick={() => update.mutate({ id: l.id, status: "rejected", bookId: l.book_id, prev: l.status })}>Tolak</Button>
+                          </>
+                        )}
                         {(l.status === "approved" || l.status === "borrowed") && (
                           <Button size="sm" variant="outline" onClick={() => update.mutate({ id: l.id, status: "returned", bookId: l.book_id, prev: l.status })}>Tandai Kembali</Button>
                         )}
                       </div>
-                    ) : <span className="text-muted-foreground">—</span>}
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                 </tr>
               );
             })}
-            {(!loans || loans.length === 0) && (<tr><td colSpan={role === "teacher" ? 6 : 5} className="p-8 text-center text-muted-foreground">Belum ada peminjaman.</td></tr>)}
+            {(!loans || loans.length === 0) && (
+              <tr>
+                <td colSpan={role === "teacher" ? 6 : 5} className="p-8 text-center text-muted-foreground">
+                  Belum ada peminjaman.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
