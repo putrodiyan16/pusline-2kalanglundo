@@ -241,6 +241,7 @@ function ScanPage() {
     qc.invalidateQueries({ queryKey: ["books"] });
     qc.invalidateQueries({ queryKey: ["books-for-loan"] });
     qc.invalidateQueries({ queryKey: ["recent-visits"] });
+    qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     
     setScannedStudent(null);
     setSelectedBooks(new Set());
