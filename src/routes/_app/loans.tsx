@@ -22,20 +22,27 @@ function LoansPage() {
   const qc = useQueryClient();
 
   const { data: loans } = useQuery({
-    // queryKey disederhanakan agar mudah di-invalidate oleh scanner
     queryKey: ["loans", role, user?.id],
     queryFn: async () => {
-      // Mengurutkan berdasarkan approved_at atau requested_at secara dinamis di level database
+      // 1. Ambil data mentah tanpa modifier order database agar tidak memicu error PostgREST 400
       let q = supabase
         .from("loans")
-        .select("*, books(title, author), profiles!loans_user_id_fkey(full_name, class_name)")
-        .order("approved_at", { ascending: false, nullsFirst: false }); // Dahulukan yang sudah disetujui lewat scan
+        .select("*, books(title, author), profiles(full_name, class_name)");
       
       if (role === "student") q = q.eq("user_id", user!.id);
       
       const { data, error } = await q;
       if (error) throw error;
-      return data as any[];
+      
+      // 2. Lakukan sorting manual di sisi klien (React) secara aman
+      // Ini akan menyusun data berdasarkan tanggal terbaru (menggunakan approved_at atau requested_at)
+      const sortedData = (data ?? []).sort((a: any, b: any) => {
+        const dateA = new Date(a.approved_at || a.requested_at || 0).getTime();
+        const dateB = new Date(b.approved_at || b.requested_at || 0).getTime();
+        return dateB - dateA;
+      });
+
+      return sortedData;
     },
     enabled: !!user && !!role,
   });
@@ -69,7 +76,6 @@ function LoansPage() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Fungsi pembantu untuk memformat tanggal secara aman jika requested_at bernilai null
   const formatTanggalAjuan = (requestedAt: string | null, approvedAt: string | null) => {
     const tanggalMentah = requestedAt || approvedAt || new Date().toISOString();
     return new Date(tanggalMentah).toLocaleDateString("id-ID");
