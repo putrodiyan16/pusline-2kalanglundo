@@ -129,8 +129,14 @@ export function AppShell() {
 
         {/* Mobile Drawer Menu */}
         {mobileMenuOpen && (
-          <div className="fixed inset-0 top-[57px] z-30 bg-black/50 md:hidden">
-            <aside className="absolute left-0 top-0 h-screen w-64 bg-gradient-hero p-5 text-primary-foreground overflow-y-auto">
+          <>
+            {/* Backdrop - z-30, hanya untuk close menu */}
+            <div
+              className="fixed inset-0 top-[57px] z-30 bg-black/50 md:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            {/* Drawer - z-50, di atas backdrop agar clickable */}
+            <aside className="fixed left-0 top-[57px] z-50 h-[calc(100vh-57px)] w-64 bg-gradient-hero p-5 text-primary-foreground overflow-y-auto md:hidden">
               <Link to="/" className="mb-8 flex items-center gap-2" onClick={handleMobileNavClick}>
                 <Library className="h-6 w-6 text-gold" />
                 <span className="font-display text-lg">Pustaka Sekolah</span>
@@ -138,9 +144,7 @@ export function AppShell() {
               {renderNav()}
               {renderUserCard()}
             </aside>
-            {/* Close menu on backdrop click */}
-            <div className="absolute inset-0" onClick={() => setMobileMenuOpen(false)} />
-          </div>
+          </>
         )}
 
         {/* Main Content */}
