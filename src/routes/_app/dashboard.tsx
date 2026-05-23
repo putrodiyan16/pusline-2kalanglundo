@@ -31,16 +31,18 @@ function Dashboard() {
     queryKey: ["dashboard-stats", role, user?.id],
     queryFn: async () => {
       if (role === "teacher") {
+        // 🎯 Fix: Hitung buku yang sedang dipinjam dengan status "approved"
         const [{ count: books }, { count: pending }, { count: borrowed }, { count: students }] = await Promise.all([
           supabase.from("books").select("*", { count: "exact", head: true }),
           supabase.from("loans").select("*", { count: "exact", head: true }).eq("status", "pending"),
-          supabase.from("loans").select("*", { count: "exact", head: true }).in("status", ["approved", "borrowed"]),
+          supabase.from("loans").select("*", { count: "exact", head: true }).eq("status", "approved"),
           supabase.from("user_roles").select("*", { count: "exact", head: true }).eq("role", "student"),
         ]);
         return { books, pending, borrowed, students };
       } else {
+        // 🎯 Fix: Hitung buku yang sedang dipinjam siswa dengan status "approved"
         const [{ count: borrowed }, { count: pending }, { count: returned }] = await Promise.all([
-          supabase.from("loans").select("*", { count: "exact", head: true }).eq("user_id", user!.id).in("status", ["approved", "borrowed"]),
+          supabase.from("loans").select("*", { count: "exact", head: true }).eq("user_id", user!.id).eq("status", "approved"),
           supabase.from("loans").select("*", { count: "exact", head: true }).eq("user_id", user!.id).eq("status", "pending"),
           supabase.from("loans").select("*", { count: "exact", head: true }).eq("user_id", user!.id).eq("status", "returned"),
         ]);
