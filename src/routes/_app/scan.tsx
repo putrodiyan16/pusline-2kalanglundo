@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ScanLine, UserCheck, BookMarked, History, LayoutDashboard, ArrowLeft, Check } from "lucide-react";
+import { ScanLine, UserCheck, BookMarked, History, ArrowLeft, Check } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_app/scan")({
@@ -130,20 +130,15 @@ function ScanPage() {
         toast.success(`Kunjungan tercatat: ${prof.full_name}`);
         qc.invalidateQueries({ queryKey: ["recent-visits"] });
 
-        // Beri jeda waktu 3 detik agar kartu QR sempat dijauhkan sebelum kamera aktif lagi
-        setTimeout(async () => {
-          if (scannerRef.current) {
-            try {
-              await scannerRef.current.resume();
-            } catch {}
-          }
-          cooldownRef.current = Date.now();
-          isProcessingRef.current = false;
-        }, 10000);
+        // 🎯 AUTO-CLOSE KAMERA SETELAH SCAN KUNJUNGAN
+        await stop();
+        cooldownRef.current = Date.now();
+        isProcessingRef.current = false;
 
       } else {
         setScannedStudent(prof);
         setSelectedBooks(new Set());
+        // 🎯 AUTO-CLOSE KAMERA SETELAH SCAN PEMINJAMAN
         await stop();
         toast.success(`Siswa terdeteksi: ${prof.full_name}`);
         isProcessingRef.current = false;
@@ -261,9 +256,6 @@ function ScanPage() {
           <h1 className="font-display text-4xl">Pindai QR Siswa</h1>
           <p className="mt-1 text-muted-foreground">Catat kunjungan perpustakaan atau peminjaman buku.</p>
         </div>
-        <Button variant="outline" onClick={() => navigate({ to: "/dashboard" })}>
-          <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
-        </Button>
       </header>
 
       {scannedStudent && mode === "borrow" ? (
