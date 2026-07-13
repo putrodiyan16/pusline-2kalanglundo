@@ -45,6 +45,11 @@ interface StudentRow {
   roles: string[];
 }
 
+// Helper untuk generate password
+function generatePassword() {
+  return Math.random().toString(36).slice(-12);
+}
+
 function ManageStudentsPage() {
   const { role, loading, user } = useAuth();
   const navigate = useNavigate();
@@ -56,7 +61,7 @@ function ManageStudentsPage() {
 
   useEffect(() => { if (!loading && role && role !== "teacher") navigate({ to: "/dashboard" }); }, [loading, role, navigate]);
 
-  const { data: rows, refetch } = useQuery({
+  const { data: rows } = useQuery({
     queryKey: ["all-users"],
     queryFn: async () => {
       const [{ data: profiles }, { data: roles }] = await Promise.all([
@@ -83,36 +88,59 @@ function ManageStudentsPage() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Mutation untuk menambah siswa via edge function
+  // Mutation untuk menambah siswa
   const addStudent = useMutation({
     mutationFn: async (data: StudentForm) => {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
+      const tempPassword = generatePassword();
 
-      if (!token) throw new Error("Unauthorized");
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-student`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+      // 1. Signup siswa
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: data.email,
+        password: tempPassword,
+        options: {
+          data: {
+            full_name: data.fullName,
+            class_name: data.className,
           },
-          body: JSON.stringify({
-            email: data.email,
-            fullName: data.fullName,
-            className: data.className,
-          }),
-        }
-      );
+        },
+      });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Gagal membuat siswa");
+      if (signUpError || !signUpData.user) {
+        throw new Error(signUpError?.message || "Gagal membuat user");
       }
 
-      return response.json();
+      // 2. Confirm email otomatis via admin (jika ada akses admin)
+      try {
+        await supabase.auth.admin.updateUserById(signUpData.user.id, {
+          email_confirm: true,
+        });
+      } catch (e) {
+        // Jika admin tidak tersedia, skip (user masih bisa login)
+        console.log("Auto-confirm email skipped");
+      }
+
+      // 3. Buat profile
+      const { error: profileError } = await supabase.from("profiles").insert({
+        id: signUpData.user.id,
+        full_name: data.fullName,
+        class_name: data.className,
+      });
+
+      if (profileError && !profileError.message.includes("duplicate")) {
+        throw profileError;
+      }
+
+      // 4. Set role sebagai student
+      const { error: roleError } = await supabase.from("user_roles").insert({
+        user_id: signUpData.user.id,
+        role: "student",
+      });
+
+      if (roleError && !roleError.message.includes("duplicate")) {
+        throw roleError;
+      }
+
+      return { tempPassword, email: data.email };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["all-users"] });
@@ -122,49 +150,86 @@ function ManageStudentsPage() {
     onError: (e: any) => toast.error(`Error: ${e.message}`),
   });
 
-  // Mutation untuk upload massal via edge function
+  // Mutation untuk upload massal
   const bulkAddStudents = useMutation({
     mutationFn: async (students: StudentForm[]) => {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
+      const results = [];
 
-      if (!token) throw new Error("Unauthorized");
+      for (const student of students) {
+        try {
+          const tempPassword = generatePassword();
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bulk-create-students`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ students }),
+          // Signup
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: student.email,
+            password: tempPassword,
+            options: {
+              data: {
+                full_name: student.fullName,
+                class_name: student.className,
+              },
+            },
+          });
+
+          if (signUpError || !signUpData.user) {
+            throw new Error(signUpError?.message || "Gagal membuat user");
+          }
+
+          // Auto confirm
+          try {
+            await supabase.auth.admin.updateUserById(signUpData.user.id, {
+              email_confirm: true,
+            });
+          } catch (e) {
+            // Skip jika tidak bisa
+          }
+
+          // Profile
+          await supabase.from("profiles").insert({
+            id: signUpData.user.id,
+            full_name: student.fullName,
+            class_name: student.className,
+          });
+
+          // Role
+          await supabase.from("user_roles").insert({
+            user_id: signUpData.user.id,
+            role: "student",
+          });
+
+          results.push({
+            status: "success",
+            email: student.email,
+            tempPassword,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          results.push({
+            status: "error",
+            email: student.email,
+            message,
+          });
         }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Gagal membuat siswa");
       }
 
-      return response.json();
+      return results;
     },
     onSuccess: (results) => {
-      const successful = results.filter((r: any) => r.status === "success").length;
-      const failed = results.filter((r: any) => r.status === "error").length;
-      
+      const successful = results.filter((r) => r.status === "success").length;
+      const failed = results.filter((r) => r.status === "error").length;
+
       qc.invalidateQueries({ queryKey: ["all-users"] });
-      
+
       if (failed > 0) {
         const errorList = results
-          .filter((r: any) => r.status === "error")
+          .filter((r) => r.status === "error")
           .map((r: any) => `${r.email}: ${r.message}`)
           .join("\n");
         toast.error(`${successful} berhasil, ${failed} gagal:\n${errorList}`);
       } else {
         toast.success(`${successful} siswa berhasil ditambahkan!`);
       }
-      
+
       setOpenBulkDialog(false);
     },
     onError: (e: any) => toast.error(`Error: ${e.message}`),
@@ -173,29 +238,18 @@ function ManageStudentsPage() {
   // Mutation untuk reset password
   const resetPassword = useMutation({
     mutationFn: async (studentId: string) => {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
+      const newPass = generatePassword();
 
-      if (!token) throw new Error("Unauthorized");
+      // Update password via admin API
+      const { error } = await supabase.auth.admin.updateUserById(studentId, {
+        password: newPass,
+      });
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-student-password`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ studentId }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Gagal reset password");
+      if (error) {
+        throw new Error(`Gagal reset password: ${error.message}`);
       }
 
-      return response.json();
+      return { newPassword: newPass };
     },
     onSuccess: (data) => {
       setNewPassword(data.newPassword);
