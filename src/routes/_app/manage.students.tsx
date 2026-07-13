@@ -13,9 +13,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Plus } from "lucide-react";
+import { Upload, Plus, RotateCcw, Copy } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 export const Route = createFileRoute("/_app/manage/students")({
@@ -28,16 +37,26 @@ interface StudentForm {
   className: string;
 }
 
+interface StudentRow {
+  id: string;
+  full_name: string;
+  email: string;
+  class_name: string;
+  roles: string[];
+}
+
 function ManageStudentsPage() {
   const { role, loading, user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openBulkDialog, setOpenBulkDialog] = useState(false);
+  const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
 
   useEffect(() => { if (!loading && role && role !== "teacher") navigate({ to: "/dashboard" }); }, [loading, role, navigate]);
 
-  const { data: rows } = useQuery({
+  const { data: rows, refetch } = useQuery({
     queryKey: ["all-users"],
     queryFn: async () => {
       const [{ data: profiles }, { data: roles }] = await Promise.all([
@@ -64,17 +83,21 @@ function ManageStudentsPage() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Mutation untuk menambah siswa
+  // Mutation untuk menambah siswa via edge function
   const addStudent = useMutation({
     mutationFn: async (data: StudentForm) => {
-      // Panggil edge function untuk membuat user
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+
+      if (!token) throw new Error("Unauthorized");
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-student`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             email: data.email,
@@ -86,29 +109,34 @@ function ManageStudentsPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || "Gagal membuat siswa");
+        throw new Error(error.error || "Gagal membuat siswa");
       }
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["all-users"] });
-      toast.success("Siswa berhasil ditambahkan");
+      toast.success(`Siswa berhasil ditambahkan!\nPassword: ${data.tempPassword}`);
       setOpenAddDialog(false);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(`Error: ${e.message}`),
   });
 
-  // Mutation untuk upload massal
+  // Mutation untuk upload massal via edge function
   const bulkAddStudents = useMutation({
     mutationFn: async (students: StudentForm[]) => {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+
+      if (!token) throw new Error("Unauthorized");
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bulk-create-students`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ students }),
         }
@@ -116,7 +144,7 @@ function ManageStudentsPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || "Gagal membuat siswa");
+        throw new Error(error.error || "Gagal membuat siswa");
       }
 
       return response.json();
@@ -126,10 +154,54 @@ function ManageStudentsPage() {
       const failed = results.filter((r: any) => r.status === "error").length;
       
       qc.invalidateQueries({ queryKey: ["all-users"] });
-      toast.success(`${successful} siswa ditambahkan${failed > 0 ? `, ${failed} gagal` : ""}`);
+      
+      if (failed > 0) {
+        const errorList = results
+          .filter((r: any) => r.status === "error")
+          .map((r: any) => `${r.email}: ${r.message}`)
+          .join("\n");
+        toast.error(`${successful} berhasil, ${failed} gagal:\n${errorList}`);
+      } else {
+        toast.success(`${successful} siswa berhasil ditambahkan!`);
+      }
+      
       setOpenBulkDialog(false);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(`Error: ${e.message}`),
+  });
+
+  // Mutation untuk reset password
+  const resetPassword = useMutation({
+    mutationFn: async (studentId: string) => {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+
+      if (!token) throw new Error("Unauthorized");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-student-password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ studentId }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Gagal reset password");
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setNewPassword(data.newPassword);
+      toast.success("Password berhasil direset!");
+    },
+    onError: (e: any) => toast.error(`Error: ${e.message}`),
   });
 
   return (
@@ -151,7 +223,7 @@ function ManageStudentsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Tambah Siswa</DialogTitle>
-              <DialogDescription>Masukkan data siswa baru</DialogDescription>
+              <DialogDescription>Masukkan data siswa baru. Password akan digenerate otomatis.</DialogDescription>
             </DialogHeader>
             <AddStudentForm onSubmit={(data) => addStudent.mutate(data)} isLoading={addStudent.isPending} />
           </DialogContent>
@@ -178,10 +250,10 @@ function ManageStudentsPage() {
       <div className="overflow-x-auto rounded-xl border bg-card shadow-card-soft">
         <table className="w-full text-sm">
           <thead className="bg-secondary text-secondary-foreground"><tr className="text-left">
-            <th className="p-3">Nama</th><th className="p-3">Email</th><th className="p-3">Kelas</th><th className="p-3">Peran</th><th className="p-3"></th>
+            <th className="p-3">Nama</th><th className="p-3">Email</th><th className="p-3">Kelas</th><th className="p-3">Peran</th><th className="p-3">Aksi</th>
           </tr></thead>
           <tbody>
-            {(rows ?? []).map((r) => {
+            {(rows ?? []).map((r: StudentRow) => {
               const isTeacher = r.roles.includes("teacher");
               const isMe = r.id === user?.id;
               return (
@@ -190,11 +262,69 @@ function ManageStudentsPage() {
                   <td className="p-3 text-muted-foreground text-xs">{r.email || "—"}</td>
                   <td className="p-3 text-muted-foreground">{r.class_name || "—"}</td>
                   <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs ${isTeacher ? "bg-gradient-gold text-primary" : "bg-secondary text-secondary-foreground"}`}>{isTeacher ? "Guru" : "Siswa"}</span></td>
-                  <td className="p-3 text-right">{!isMe && (
-                    <Button size="sm" variant="outline" onClick={() => promote.mutate({ userId: r.id, makeTeacher: !isTeacher })}>
-                      {isTeacher ? "Cabut Guru" : "Jadikan Guru"}
-                    </Button>
-                  )}</td>
+                  <td className="p-3 text-right">
+                    <div className="flex gap-2 justify-end">
+                      {!isTeacher && (
+                        <AlertDialog open={resetPasswordId === r.id} onOpenChange={(open) => {
+                          if (!open) {
+                            setResetPasswordId(null);
+                            setNewPassword(null);
+                          } else {
+                            setResetPasswordId(r.id);
+                          }
+                        }}>
+                          <Button size="sm" variant="outline" className="gap-1" title="Reset password" onClick={() => setResetPasswordId(r.id)}>
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Reset Password</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {newPassword ? (
+                                  <div className="space-y-3 mt-4">
+                                    <p>Password baru untuk {r.full_name}:</p>
+                                    <div className="flex gap-2 bg-secondary p-2 rounded">
+                                      <code className="flex-1 font-mono text-sm">{newPassword}</code>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(newPassword);
+                                          toast.success("Password disalin!");
+                                        }}
+                                      >
+                                        <Copy className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Simpan password ini dan berikan kepada siswa.</p>
+                                  </div>
+                                ) : (
+                                  `Apakah Anda yakin ingin mereset password untuk ${r.full_name}?`
+                                )}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogCancel onClick={() => setNewPassword(null)}>
+                              {newPassword ? "Tutup" : "Batal"}
+                            </AlertDialogCancel>
+                            {!newPassword && (
+                              <AlertDialogAction
+                                onClick={() => resetPassword.mutate(r.id)}
+                                disabled={resetPassword.isPending}
+                              >
+                                {resetPassword.isPending ? "Mereset..." : "Ya, Reset"}
+                              </AlertDialogAction>
+                            )}
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                      {!isMe && (
+                        <Button size="sm" variant="outline" onClick={() => promote.mutate({ userId: r.id, makeTeacher: !isTeacher })}>
+                          {isTeacher ? "Cabut Guru" : "Jadikan Guru"}
+                        </Button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -236,6 +366,8 @@ function AddStudentForm({ onSubmit, isLoading }: { onSubmit: (data: StudentForm)
 }
 
 function BulkUploadForm({ onSubmit, isLoading }: { onSubmit: (students: StudentForm[]) => void; isLoading: boolean }) {
+  const [students, setStudents] = useState<StudentForm[]>([]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -263,11 +395,11 @@ function BulkUploadForm({ onSubmit, isLoading }: { onSubmit: (students: StudentF
         }
 
         // Parse data
-        const students: StudentForm[] = [];
+        const parsedStudents: StudentForm[] = [];
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(",").map(v => v.trim());
-          if (values.length >= 3 && values[emailIdx]) {
-            students.push({
+          if (values.length > Math.max(nameIdx, emailIdx, classIdx) && values[emailIdx]) {
+            parsedStudents.push({
               fullName: values[nameIdx],
               email: values[emailIdx],
               className: values[classIdx],
@@ -275,12 +407,13 @@ function BulkUploadForm({ onSubmit, isLoading }: { onSubmit: (students: StudentF
           }
         }
 
-        if (students.length === 0) {
+        if (parsedStudents.length === 0) {
           toast.error("Tidak ada data siswa di file");
           return;
         }
 
-        onSubmit(students);
+        setStudents(parsedStudents);
+        toast.success(`${parsedStudents.length} siswa siap diupload`);
       } catch (e: any) {
         toast.error(`Error parsing file: ${e.message}`);
       }
@@ -305,14 +438,37 @@ function BulkUploadForm({ onSubmit, isLoading }: { onSubmit: (students: StudentF
       </div>
       <div className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded">
         <p className="font-semibold mb-1">Contoh format CSV:</p>
-        <code className="block text-xs overflow-x-auto">
-          full_name,email,class_name{"\n"}
-          Ahmad Hidayat,ahmad@sekolah.com,7A{"\n"}
-          Siti Nur,siti@sekolah.com,7A
+        <code className="block text-xs overflow-x-auto whitespace-pre">
+{`full_name,email,class_name
+Ahmad Hidayat,ahmad@sekolah.com,7A
+Siti Nur,siti@sekolah.com,7A`}
         </code>
       </div>
-      <Button type="button" onClick={() => toast.info("Silahkan pilih file CSV terlebih dahulu")} disabled={isLoading} className="w-full">
-        {isLoading ? "Mengupload..." : "Upload"}
+      
+      {students.length > 0 && (
+        <div className="text-xs bg-blue-50 dark:bg-blue-900/20 p-2 rounded border border-blue-200 dark:border-blue-800">
+          <p className="font-semibold text-blue-900 dark:text-blue-100">Siap diupload: {students.length} siswa</p>
+          <ul className="mt-1 max-h-32 overflow-y-auto">
+            {students.map((s, i) => (
+              <li key={i} className="text-blue-800 dark:text-blue-200">• {s.fullName} ({s.email})</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      
+      <Button 
+        type="button" 
+        onClick={() => {
+          if (students.length === 0) {
+            toast.error("Silahkan pilih file CSV terlebih dahulu");
+            return;
+          }
+          onSubmit(students);
+        }} 
+        disabled={isLoading || students.length === 0} 
+        className="w-full"
+      >
+        {isLoading ? "Mengupload..." : `Upload ${students.length > 0 ? `(${students.length} siswa)` : ""}`}
       </Button>
     </div>
   );
