@@ -67,33 +67,29 @@ function ManageStudentsPage() {
   // Mutation untuk menambah siswa
   const addStudent = useMutation({
     mutationFn: async (data: StudentForm) => {
-      // 1. Buat user account di auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: data.email,
-        password: Math.random().toString(36).slice(-12), // Password acak
-        email_confirm: true,
-      });
+      // Panggil edge function untuk membuat user
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-student`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            email: data.email,
+            fullName: data.fullName,
+            className: data.className,
+          }),
+        }
+      );
 
-      if (authError) throw new Error(`Auth error: ${authError.message}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Gagal membuat siswa");
+      }
 
-      // 2. Buat profile
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: authData.user?.id,
-        full_name: data.fullName,
-        class_name: data.className,
-      });
-
-      if (profileError) throw new Error(`Profile error: ${profileError.message}`);
-
-      // 3. Set role sebagai student
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: authData.user?.id,
-        role: "student",
-      });
-
-      if (roleError) throw new Error(`Role error: ${roleError.message}`);
-
-      return authData.user;
+      return response.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-users"] });
@@ -106,47 +102,28 @@ function ManageStudentsPage() {
   // Mutation untuk upload massal
   const bulkAddStudents = useMutation({
     mutationFn: async (students: StudentForm[]) => {
-      const results = [];
-      
-      for (const student of students) {
-        try {
-          // 1. Buat user account
-          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-            email: student.email,
-            password: Math.random().toString(36).slice(-12),
-            email_confirm: true,
-          });
-
-          if (authError) throw new Error(`${student.email}: ${authError.message}`);
-
-          // 2. Buat profile
-          const { error: profileError } = await supabase.from("profiles").insert({
-            id: authData.user?.id,
-            full_name: student.fullName,
-            class_name: student.className,
-          });
-
-          if (profileError) throw new Error(`${student.email}: ${profileError.message}`);
-
-          // 3. Set role
-          const { error: roleError } = await supabase.from("user_roles").insert({
-            user_id: authData.user?.id,
-            role: "student",
-          });
-
-          if (roleError) throw new Error(`${student.email}: ${roleError.message}`);
-
-          results.push({ status: "success", email: student.email });
-        } catch (e: any) {
-          results.push({ status: "error", email: student.email, message: e.message });
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bulk-create-students`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({ students }),
         }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Gagal membuat siswa");
       }
 
-      return results;
+      return response.json();
     },
     onSuccess: (results) => {
-      const successful = results.filter(r => r.status === "success").length;
-      const failed = results.filter(r => r.status === "error").length;
+      const successful = results.filter((r: any) => r.status === "success").length;
+      const failed = results.filter((r: any) => r.status === "error").length;
       
       qc.invalidateQueries({ queryKey: ["all-users"] });
       toast.success(`${successful} siswa ditambahkan${failed > 0 ? `, ${failed} gagal` : ""}`);
@@ -289,7 +266,7 @@ function BulkUploadForm({ onSubmit, isLoading }: { onSubmit: (students: StudentF
         const students: StudentForm[] = [];
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(",").map(v => v.trim());
-          if (values.length >= 3) {
+          if (values.length >= 3 && values[emailIdx]) {
             students.push({
               fullName: values[nameIdx],
               email: values[emailIdx],
@@ -334,7 +311,7 @@ function BulkUploadForm({ onSubmit, isLoading }: { onSubmit: (students: StudentF
           Siti Nur,siti@sekolah.com,7A
         </code>
       </div>
-      <Button type="button" onClick={() => toast.info("Fitur sedang diproses...")} disabled={isLoading} className="w-full">
+      <Button type="button" onClick={() => toast.info("Silahkan pilih file CSV terlebih dahulu")} disabled={isLoading} className="w-full">
         {isLoading ? "Mengupload..." : "Upload"}
       </Button>
     </div>
